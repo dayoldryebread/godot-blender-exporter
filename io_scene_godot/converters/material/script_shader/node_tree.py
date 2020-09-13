@@ -228,7 +228,7 @@ class ScriptShader:
             script += line + ";\n"
 
         for tex, tex_uniform in self._textures.items():
-            script += "uniform sampler2D %s%s;\n" % (
+            script += "uniform sampler2D %s%s : hint_albedo;\n" % (
                 tex_uniform, tex.hint_str())
         script += "\n"
 
