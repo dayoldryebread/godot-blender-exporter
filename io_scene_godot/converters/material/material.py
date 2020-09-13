@@ -8,6 +8,7 @@ import logging
 import os
 import bpy
 from .script_shader import export_script_shader
+from .script_shader import export_texture
 from ...structures import (
     InternalResource, ExternalResource, gamma_correct, ValidationError, RGBA)
 
@@ -55,7 +56,8 @@ def export_material(escn_file, export_settings, bl_object, material):
     return "SubResource({})".format(resource_id)
 
 
-def export_as_spatial_material(material_rsc_name, material):
+def export_as_spatial_material(escn_file, export_settings,
+                               material_rsc_name, material):
     """Export a Blender Material as Godot Spatial Material"""
     mat = InternalResource("SpatialMaterial", material_rsc_name)
 
@@ -80,9 +82,20 @@ def export_as_spatial_material(material_rsc_name, material):
         return surf.inputs[key].default_value
 
     if surf.type == "BSDF_PRINCIPLED":
-        mat["albedo_color"] = RGBA([
-            *gamma_correct(val("Base Color"))[:3], val("Alpha")
-        ])
+        links = surf.inputs["Base Color"].links
+
+        if len(links) > 0 and \
+           links[0].from_node.bl_idname == "ShaderNodeTexImage":
+            using_texture = True
+            img_rsc_id = export_texture(escn_file, export_settings,
+                                    links[0].from_node.image)
+            mat["albedo_texture"] = "ExtResource(%d)" % img_rsc_id
+            mat["albedo_color"] = RGBA([1.0, 1.0, 1.0, val("Alpha")])
+        else:
+            mat["albedo_color"] = RGBA([
+                *gamma_correct(val("Base Color"))[:3], val("Alpha")
+            ])
+
         mat["flags_transparent"] = val("Alpha") < 1.0
 
         mat["metallic"] = val("Metallic")
@@ -141,7 +154,8 @@ def generate_material_resource(escn_file, export_settings, bl_object,
                 "%s, in material '%s'", str(exception), material.name
             )
     else:  # Spatial Material
-        mat = export_as_spatial_material(material_rsc_name, material)
+        mat = export_as_spatial_material(escn_file, export_settings,
+                                         material_rsc_name, material)
 
     # make material-object tuple as an identifier, as uniforms is part of
     # material and they are binded with object
